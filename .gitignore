@@ -189,6 +189,27 @@ data/uploads/
 *.tmp
 *.temp
 
+# Media files - Images
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.webp
+*.svg
+*.ico
+
+# Document files
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+
 # OCR and image processing temporary files
 *.png.tmp
 *.jpg.tmp
