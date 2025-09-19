@@ -12,7 +12,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'modules'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
 
 # Import custom modules
-# OCR processor removed - using Gemini only
 from answer_parser import AnswerKeyParser, QuestionMatcher
 from similarity import GeminiOnlyGradingEngine, get_similarity_method_info
 from llm_grader import create_llm_grader, get_available_providers
@@ -165,16 +164,26 @@ def show_data_status_sidebar():
         st.success(f"✅ Answer Key: {len(st.session_state.answer_key)} questions")
         if 'answer_key' in st.session_state.data_timestamps:
             st.caption(f"Loaded: {st.session_state.data_timestamps['answer_key']}")
+        
+        # Show quick preview button
+        if st.button("🔍 Preview Answer Key", key="preview_ak_sidebar"):
+            st.session_state.show_answer_key_preview = True
     else:
         st.error("❌ Answer Key: Not loaded")
+        st.caption("Upload on 'Upload Answer Key' page")
     
     # Student Answers Status
     if st.session_state.get('student_answers'):
         st.success(f"✅ Student Answers: {len(st.session_state.student_answers)} questions")
         if 'student_answers' in st.session_state.data_timestamps:
             st.caption(f"Loaded: {st.session_state.data_timestamps['student_answers']}")
+        
+        # Show quick preview button
+        if st.button("🔍 Preview Student Answers", key="preview_sa_sidebar"):
+            st.session_state.show_student_answers_preview = True
     else:
         st.error("❌ Student Answers: Not loaded")
+        st.caption("Upload on 'Upload Student Answers' page")
     
     # Grading Results Status
     if st.session_state.get('grading_results'):
@@ -183,8 +192,14 @@ def show_data_status_sidebar():
         st.success(f"✅ Graded: {percentage:.1f}%")
         if 'grading_results' in st.session_state.data_timestamps:
             st.caption(f"Graded: {st.session_state.data_timestamps['grading_results']}")
+        
+        # Show quick navigation to results
+        if st.button("📀 View Results", key="view_results_sidebar"):
+            st.session_state.current_page = 'results_dashboard'
+            st.rerun()
     else:
         st.error("❌ Grading: Not completed")
+        st.caption("Complete on 'Grading Interface' page")
 
 def show_quick_actions_sidebar():
     """Show quick action buttons in the sidebar."""
@@ -327,6 +342,35 @@ def add_navigation_buttons(current_step: str):
                 st.session_state.current_page = next_step
                 st.rerun()
 
+def handle_preview_modals():
+    """Handle preview modal popups triggered from sidebar."""
+    # Answer Key Preview Modal
+    if st.session_state.get('show_answer_key_preview'):
+        with st.expander("📋 Answer Key Preview (Click to close)", expanded=True):
+            if st.session_state.get('answer_key'):
+                show_answer_key_preview(st.session_state.answer_key, use_expander=False)
+            else:
+                st.warning("No answer key loaded")
+        
+        if st.button("❌ Close Preview", key="close_ak_preview"):
+            st.session_state.show_answer_key_preview = False
+            st.rerun()
+    
+    # Student Answers Preview Modal
+    if st.session_state.get('show_student_answers_preview'):
+        with st.expander("📝 Student Answers Preview (Click to close)", expanded=True):
+            if st.session_state.get('student_answers'):
+                for q_num, answer in sorted(st.session_state.student_answers.items()):
+                    st.write(f"**Question {q_num}:**")
+                    st.text(answer[:300] + "..." if len(answer) > 300 else answer)
+                    st.write("---")
+            else:
+                st.warning("No student answers loaded")
+        
+        if st.button("❌ Close Preview", key="close_sa_preview"):
+            st.session_state.show_student_answers_preview = False
+            st.rerun()
+
 def main():
     """Main application function with navigation system."""
     # Initialize session state
@@ -335,7 +379,6 @@ def main():
     # Initialize navigation state
     initialize_navigation_state()
     
-    # Initialize Gemini-only configuration
     setup_gemini_configuration()
     
     # Sidebar navigation
@@ -347,6 +390,9 @@ def main():
     
     # Show progress indicator
     show_progress_indicator()
+    
+    # Handle preview modals from sidebar buttons
+    handle_preview_modals()
     
     # Route to appropriate page based on current navigation
     current_page = st.session_state.get('current_page', 'upload_answer_key')
@@ -365,8 +411,7 @@ def main():
         st.rerun()
 
 def setup_gemini_configuration():
-    """Setup Gemini-only configuration without sidebar."""
-    # Force Gemini OCR method
+
     st.session_state.ocr_method = "gemini"
     
     # Use native extraction for answer keys by default
@@ -421,6 +466,31 @@ def show_answer_key_upload():
     # Add navigation buttons
     add_navigation_buttons('upload_answer_key')
     
+    # Show currently loaded answer key if exists
+    if st.session_state.get('answer_key'):
+        st.success(f"✅ Answer Key Loaded: {len(st.session_state.answer_key)} questions")
+        
+        with st.expander("📋 Currently Loaded Answer Key", expanded=False):
+            show_answer_key_preview(st.session_state.answer_key, use_expander=False)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("🔄 Replace Answer Key", help="Upload a new answer key"):
+                clear_answer_key_data()
+                st.rerun()
+        with col2:
+            if st.button("➡️ Continue to Student Answers", type="primary"):
+                st.session_state.current_page = 'upload_student_answers'
+                st.rerun()
+        with col3:
+            if st.button("⚖️ Go to Grading", disabled=not st.session_state.get('student_answers')):
+                st.session_state.current_page = 'grading_interface'
+                st.rerun()
+        
+        st.markdown("---")
+        st.markdown("### Or upload a new answer key below:")
+    
+    # File upload section
     uploaded_file = display_file_upload_section(
         "Answer Key Document",
         ["pdf", "word", "image"],
@@ -501,6 +571,33 @@ def show_student_answer_upload():
         with st.expander("Answer Key Summary", expanded=False):
             show_answer_key_preview(st.session_state.answer_key, use_expander=False)
     
+    # Show currently loaded student answers if they exist
+    if st.session_state.get('student_answers'):
+        st.success(f"✅ Student Answers Loaded: {len(st.session_state.student_answers)} questions")
+        
+        with st.expander("📝 Currently Loaded Student Answers", expanded=False):
+            for q_num, answer in sorted(st.session_state.student_answers.items()):
+                st.write(f"**Question {q_num}:**")
+                st.text(answer[:200] + "..." if len(answer) > 200 else answer)
+                st.write("---")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("🔄 Replace Student Answers", help="Upload new student answer images"):
+                clear_student_answers_data()
+                st.rerun()
+        with col2:
+            if st.button("⚖️ Continue to Grading", type="primary"):
+                st.session_state.current_page = 'grading_interface'
+                st.rerun()
+        with col3:
+            if st.button("📀 View Results", disabled=not st.session_state.get('grading_results')):
+                st.session_state.current_page = 'results_dashboard'
+                st.rerun()
+        
+        st.markdown("---")
+        st.markdown("### Or upload new student answer images below:")
+    
     # Initialize session state for sequential processing
     if 'processed_images' not in st.session_state:
         st.session_state.processed_images = []
@@ -564,9 +661,9 @@ def show_student_answer_upload():
                         page_answers = gemini.process_answer_sheet(file_path)
                         
                         if page_answers:
-                            st.success(f"Gemini found {len(page_answers)} questions on this page")
+                            st.success(f"Found {len(page_answers)} questions on this page")
                         else:
-                            st.warning("Gemini found no questions on this page")
+                            st.warning("Found no questions on this page")
                             
                     except ImportError as e:
                         st.error(f"Gemini module import failed: {e}")
@@ -702,6 +799,29 @@ def show_grading_interface():
     # Add navigation buttons
     add_navigation_buttons('grading_interface')
     
+    # Show data status summary
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.session_state.get('answer_key'):
+            st.success(f"✅ Answer Key: {len(st.session_state.answer_key)} questions loaded")
+        else:
+            st.error("❌ Answer Key: Not loaded")
+    
+    with col2:
+        if st.session_state.get('student_answers'):
+            st.success(f"✅ Student Answers: {len(st.session_state.student_answers)} questions loaded")
+        else:
+            st.error("❌ Student Answers: Not loaded")
+    
+    # Show grading results if they exist
+    if st.session_state.get('grading_results'):
+        summary = st.session_state.grading_results.get('summary', {})
+        st.info(f"🎆 Previous Results: {summary.get('percentage', 0):.1f}% - Click 'View Results' to see details or re-grade below")
+        
+        if st.button("📀 View Previous Results", type="secondary"):
+            st.session_state.current_page = 'results_dashboard'
+            st.rerun()
+    
     # Display questions side by side in a more organized way
     if st.session_state.answer_key and st.session_state.student_answers:
         # Get all question numbers
@@ -765,12 +885,11 @@ def show_grading_interface():
     with col2:
         # Show recalculate button if results already exist
         if st.session_state.get('grading_results'):
-            if st.button("🔄 Recalculate with Current Settings"):
+            if st.button("Recalculate with Current Settings"):
                 recalculate_grades()
 
 def perform_grading():
-    """Perform the main grading process using Gemini-only approach."""
-    with st.spinner("Starting Gemini-only grading process..."):
+    with st.spinner("Starting grading process..."):
         try:
             # Require Gemini API key
             gemini_api_key = st.session_state.get('gemini_api_key')
@@ -780,7 +899,6 @@ def perform_grading():
                 st.info("Please configure your Gemini API key to continue")
                 return
             
-            st.info("Using Gemini AI exclusively for intelligent grading")
             grading_engine = GeminiOnlyGradingEngine(gemini_api_key=gemini_api_key)
             
             # Grade all answers using Gemini exclusively
@@ -795,15 +913,15 @@ def perform_grading():
             gemini_errors = summary.get('gemini_errors', 0)
             
             if gemini_success > 0:
-                st.success(f"Gemini intelligent grading: {gemini_success} questions")
+                st.success(f"Grading: {gemini_success} questions")
             if gemini_errors > 0:
-                st.warning(f"Gemini errors: {gemini_errors} questions")
+                st.warning(f"Errors: {gemini_errors} questions")
             
             # Note: No additional LLM justifications needed since Gemini provides comprehensive analysis
             
             SessionManager.save_grading_results(results)
             save_data_timestamp('grading_results')
-            display_success_message("Gemini-only grading completed successfully!")
+            display_success_message("Grading completed successfully!")
             
             # Navigate to results dashboard
             st.session_state.current_page = 'results_dashboard'
@@ -1163,7 +1281,7 @@ def generate_csv_report(results: Dict) -> str:
 
 def recalculate_grades():
     """Recalculate grades with current settings using hybrid approach."""
-    st.info("🔄 Recalculating grades with Gemini AI only...")
+    st.info("Recalculating grades...")
     
     with st.spinner("Re-grading in progress..."):
         try:
@@ -1199,11 +1317,8 @@ def recalculate_grades():
 
 def show_recalculation_comparison(new_results: Dict):
     """Show comparison between old and new grading results."""
-    st.subheader("🔍 Recalculation Summary")
-    
-    # Show method used
-    st.info("Grading Method Used: Gemini AI Only")
-    
+    st.subheader("Recalculation Summary")
+        
     # Show new summary
     new_summary = new_results.get('summary', {})
     
