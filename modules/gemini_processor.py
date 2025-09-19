@@ -16,6 +16,7 @@ import json
 import cv2
 import numpy as np
 import os
+import time
 from typing import Dict, List, Optional, Tuple, Any
 from PIL import Image, ImageEnhance, ImageFilter
 import io
@@ -38,11 +39,12 @@ class GeminiHandwritingOCR:
     - Noisy or blurred text documents
     """
     
-    def __init__(self, api_key: str, enable_preprocessing: bool = True):
+    def __init__(self, api_key: str, enable_preprocessing: bool = True, model_name: str = 'gemini-1.5-flash'):
         """Initialize Gemini with API key from Google AI Studio"""
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        self.model = genai.GenerativeModel(model_name)
         self.enable_preprocessing = enable_preprocessing
+        self.model_name = model_name
     
     def extract_handwritten_questions(self, image_path: str) -> Dict[int, str]:
         """
@@ -61,7 +63,7 @@ class GeminiHandwritingOCR:
             # Apply advanced preprocessing for image/video analytics if enabled
             if self.enable_preprocessing:
                 image_path_processed = self._preprocess_image_for_analytics(image_path)
-                print(f"🖼️ Applied advanced image preprocessing for optimal OCR")
+                print(f"Applied advanced image preprocessing for optimal OCR")
             
             image = Image.open(image_path_processed)
             
@@ -121,53 +123,18 @@ Focus on accuracy and completeness. Even if some words are unclear, provide your
                 
                 # Log confidence and notes
                 if 'confidence' in data:
-                    print(f"🎯 Gemini OCR Confidence: {data['confidence']}")
+                    print(f"Gemini OCR Confidence: {data['confidence']}")
                 if 'notes' in data:
-                    print(f"📝 Notes: {data['notes']}")
+                    print(f"Notes: {data['notes']}")                    
                     
                 return questions
             else:
-                # Fallback: try to parse without JSON structure
-                return self._fallback_parse(response_text)
+                print("Could not parse JSON response from Gemini")
+                return {}
                 
         except json.JSONDecodeError:
-            print("⚠️ Could not parse JSON response, trying fallback parsing...")
-            return self._fallback_parse(response_text)
-    
-    def _fallback_parse(self, text: str) -> Dict[int, str]:
-        """Fallback parsing when JSON parsing fails"""
-        questions = {}
-        lines = text.split('\n')
-        
-        current_question = None
-        current_answer = []
-        
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            
-            # Look for question patterns
-            question_match = re.match(r'^[\"\']?(\d+)[\"\']?\s*[:.]?\s*[\"\']?(.*)', line)
-            if question_match:
-                # Save previous question
-                if current_question and current_answer:
-                    questions[current_question] = ' '.join(current_answer).strip()
-                
-                # Start new question
-                current_question = int(question_match.group(1))
-                answer_text = question_match.group(2).strip('\'"')
-                current_answer = [answer_text] if answer_text else []
-            else:
-                # Add to current answer
-                if current_question:
-                    current_answer.append(line.strip('\'"'))
-        
-        # Don't forget last question
-        if current_question and current_answer:
-            questions[current_question] = ' '.join(current_answer).strip()
-        
-        return questions
+            print("Could not parse JSON response from Gemini")
+            return {}
 
     def _preprocess_image_for_analytics(self, image_path: str) -> str:
         """
@@ -192,7 +159,7 @@ Focus on accuracy and completeness. Even if some words are unclear, provide your
             # Load image with OpenCV for advanced processing
             img = cv2.imread(image_path)
             if img is None:
-                print(f"⚠️ Could not load image {image_path}, using original")
+                print(f"Could not load image {image_path}, using original")
                 return image_path
             
             # Step 1: Noise reduction using bilateral filter
@@ -256,12 +223,12 @@ Focus on accuracy and completeness. Even if some words are unclear, provide your
             # Save final processed image
             final_enhanced.save(processed_path, quality=95, optimize=True)
             
-            print(f"✅ Advanced preprocessing complete: {processed_path}")
+            print(f"Advanced preprocessing complete: {processed_path}")
             return processed_path
             
         except Exception as e:
-            print(f"⚠️ Image preprocessing failed: {e}")
-            print(f"📝 Using original image: {image_path}")
+            print(f"Image preprocessing failed: {e}")
+            print(f"Using original image: {image_path}")
             return image_path
     
     def _enhance_image_quality(self, image_path: str) -> str:
@@ -301,7 +268,7 @@ Focus on accuracy and completeness. Even if some words are unclear, provide your
             return enhanced_path
             
         except Exception as e:
-            print(f"⚠️ Image enhancement failed: {e}")
+            print(f"Image enhancement failed: {e}")
             return image_path
 
 
@@ -314,9 +281,9 @@ class GeminiGrader:
     def __init__(self, api_key: str):
         """Initialize Gemini grader with API key"""
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        self.model = genai.GenerativeModel('gemini-2.0-flash-lite')
         self.api_key = api_key
-        print("🤖 Gemini Grader initialized for intelligent answer evaluation")
+        print("Gemini Grader initialized for intelligent answer evaluation")
     
     def grade_answer(self, question_num: int, correct_answer: str, student_answer: str, 
                     max_marks: int = 10) -> Dict[str, Any]:
@@ -359,8 +326,8 @@ class GeminiGrader:
                 raise Exception("No response from Gemini")
                 
         except Exception as e:
-            print(f"⚠️ Gemini grading failed: {e}")
-            print("🔄 Falling back to similarity-based grading")
+            print(f"Gemini grading failed: {e}")
+            print("Falling back to similarity-based grading")
             return self._fallback_grading(correct_answer, student_answer, max_marks)
     
     def _create_grading_prompt(self, question_num: int, correct_answer: str, 
@@ -385,16 +352,17 @@ GRADING INSTRUCTIONS:
 2. Recognize equivalent explanations and terminology
 3. Assess completeness, accuracy, and clarity
 4. Consider partial credit for partially correct responses
-5. Be fair but maintain academic standards
+5. Do not give the same marks for all the questions, as it might be unfair, and may also look suspicious.
+6. If the answer is not long enough for 10 marks, give partial credit.
 
 Provide your assessment in this EXACT JSON format:
 {{
-  "marks_out_of_10": 8,
-  "percentage": 80.0,
-  "confidence": "high",
+  "marks_out_of_10": (Placeholder for marks out of 10),
+  "percentage": (Placeholder for percentage),
+  "confidence": "Based on confidence level, e.g., high, medium, low",
   "justification": "Clear explanation of why this grade was assigned, highlighting what the student got right and what could be improved.",
   "suggestions": "Specific advice for improvement and learning.",
-  "grade_category": "good"
+  "grade_category": "Based on grade category, e.g., excellent, good, etc.)"
 }}
 
 GRADE CATEGORIES:
@@ -442,8 +410,8 @@ IMPORTANT: Return ONLY the JSON response, no additional text.
                 raise ValueError("No JSON found in response")
                 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
-            print(f"⚠️ Failed to parse Gemini response: {e}")
-            print(f"📝 Raw response: {response_text[:200]}...")
+            print(f"Failed to parse Gemini response: {e}")
+            print(f"Raw response: {response_text[:200]}...")
             return self._create_fallback_result(max_marks)
     
     def _get_category_from_percentage(self, percentage: float) -> str:
@@ -488,7 +456,7 @@ IMPORTANT: Return ONLY the JSON response, no additional text.
             }
             
         except Exception as e:
-            print(f"⚠️ Fallback grading also failed: {e}")
+            print(f"Fallback grading also failed: {e}")
             return self._create_fallback_result(max_marks)
     
     def _create_fallback_result(self, max_marks: int) -> Dict[str, Any]:
@@ -505,6 +473,9 @@ IMPORTANT: Return ONLY the JSON response, no additional text.
             'grade_category': 'satisfactory',
             'grading_method': 'error_fallback'
         }
+
+
+class GeminiLLMGrader:
     """
     Gemini 2.5 Flash powered LLM grader for answer evaluation and justification
     """
@@ -512,7 +483,7 @@ IMPORTANT: Return ONLY the JSON response, no additional text.
     def __init__(self, api_key: str):
         """Initialize Gemini LLM grader"""
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        self.model = genai.GenerativeModel('gemini-2.0-flash-lite')
     
     def generate_justification(self, question_num: int, correct_answer: str, 
                              student_answer: str, similarity_score: float, 
@@ -618,35 +589,35 @@ class GeminiMarkMySheets:
         self.api_key = api_key
         self.ocr = GeminiHandwritingOCR(api_key, enable_preprocessing)
         self.grader = GeminiGrader(api_key)  # Use the new intelligent grader
-        print(f"🔧 Gemini system initialized with preprocessing: {enable_preprocessing}")
-        print("🎆 Intelligent Gemini grading system ready!")
+        print(f"Gemini system initialized with preprocessing: {enable_preprocessing}")
+        print("Intelligent Gemini grading system ready!")
     
     def process_answer_sheet(self, image_path: str) -> Dict[int, str]:
         """Extract text from handwritten answer sheet with preprocessing confirmation"""
-        print("🤖 Processing handwritten answer sheet with Gemini 2.5 Flash...")
+        print("Processing handwritten answer sheet with Gemini 2.5 Flash...")
         if self.ocr.enable_preprocessing:
-            print("🔧 Advanced image preprocessing is ENABLED for optimal OCR results")
+            print("Advanced image preprocessing is ENABLED for optimal OCR results")
         questions = self.ocr.extract_handwritten_questions(image_path)
-        print(f"✅ Extracted {len(questions)} questions from handwriting")
+        print(f"Extracted {len(questions)} questions from handwriting")
         return questions
     
     def grade_with_intelligence(self, question_num: int, correct_answer: str, 
                                student_answer: str, max_marks: int = 10) -> Dict[str, Any]:
         """Grade answer using Gemini's advanced reasoning capabilities"""
-        print(f"🤖 Using Gemini intelligent grading for Question {question_num}...")
+        print(f"Using Gemini intelligent grading for Question {question_num}...")
         result = self.grader.grade_answer(question_num, correct_answer, student_answer, max_marks)
         
         # Add additional fields for compatibility
         result['correct_answer'] = correct_answer
         result['student_answer'] = student_answer
         
-        print(f"✅ Gemini grading complete: {result['marks_awarded']}/{max_marks} ({result['percentage']:.1f}%)")
+        print(f"Gemini grading complete: {result['marks_awarded']}/{max_marks} ({result['percentage']:.1f}%)")
         return result
     
     def batch_grade_answers(self, answer_key: Dict[int, Dict[str, Any]], 
                            student_answers: Dict[int, str]) -> Dict[int, Dict[str, Any]]:
         """Grade all answers using Gemini intelligence with progress tracking"""
-        print("🚀 Starting Gemini intelligent batch grading...")
+        print("Starting Gemini intelligent batch grading...")
         results = {}
         
         total_questions = len(answer_key)
@@ -656,7 +627,7 @@ class GeminiMarkMySheets:
             max_marks = answer_data['marks']
             student_answer = student_answers.get(q_num, "")
             
-            print(f"📝 Processing Question {q_num} ({i}/{total_questions})...")
+            print(f"Processing Question {q_num} ({i}/{total_questions})...")
             
             results[q_num] = self.grade_with_intelligence(q_num, correct_answer, student_answer, max_marks)
             
@@ -678,7 +649,7 @@ class GeminiMarkMySheets:
             'grading_method': 'gemini_intelligent'
         }
         
-        print(f"🎆 Batch grading complete: {total_marks}/{total_max_marks} ({results['summary']['percentage']:.1f}%)")
+        print(f"Batch grading complete: {total_marks}/{total_max_marks} ({results['summary']['percentage']:.1f}%)")
         return results
 
 
@@ -690,8 +661,8 @@ def test_gemini_ocr():
     # You'll need to set your Gemini API key
     api_key = os.getenv('GEMINI_API_KEY')
     if not api_key:
-        print("❌ Please set GEMINI_API_KEY environment variable")
-        print("💡 Get your free API key from: https://aistudio.google.com/")
+        print("Please set GEMINI_API_KEY environment variable")
+        print("Get your free API key from: https://aistudio.google.com/")
         return
     
     gemini = GeminiMarkMySheets(api_key)
@@ -699,20 +670,20 @@ def test_gemini_ocr():
     # Test with sample1.png
     image_path = "samples/sample1.png"
     if os.path.exists(image_path):
-        print("🧪 TESTING GEMINI HANDWRITING OCR")
+        print("TESTING GEMINI HANDWRITING OCR")
         print("=" * 50)
         
         questions = gemini.process_answer_sheet(image_path)
         
         if questions:
-            print(f"\n📋 EXTRACTED QUESTIONS:")
+            print(f"\nEXTRACTED QUESTIONS:")
             print("-" * 30)
             for q_num, answer in questions.items():
                 print(f"Question {q_num}: {answer[:100]}...")
         else:
-            print("⚠️ No questions extracted")
+            print("No questions extracted")
     else:
-        print(f"❌ Test image not found: {image_path}")
+        print(f"Test image not found: {image_path}")
 
 
 if __name__ == "__main__":

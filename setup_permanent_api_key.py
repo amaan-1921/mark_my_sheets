@@ -87,7 +87,7 @@ def verify_api_key():
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-2.0-flash-lite')
         response = model.generate_content("Hello")
         
         print("✅ API key is working!")

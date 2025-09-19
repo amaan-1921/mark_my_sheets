@@ -7,7 +7,7 @@ try:
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
-    print("Warning: sentence-transformers not available. Using cosine similarity fallback.")
+    print("Warning: sentence-transformers not available. Semantic similarity will not work.")
 from typing import Dict, List, Tuple, Optional, Any
 import string
 
@@ -39,12 +39,9 @@ class SimilarityCalculator:
                 try:
                     self.semantic_model = SentenceTransformer('all-MiniLM-L6-v2')
                 except Exception as e:
-                    print(f"Warning: Could not load semantic model: {e}")
-                    print("Falling back to cosine similarity")
-                    self.method = "cosine"
+                    raise ImportError(f"Could not load semantic model: {e}")
             else:
-                print("sentence-transformers not available, falling back to cosine similarity")
-                self.method = "cosine"
+                raise ImportError("sentence-transformers not available for semantic similarity")
     
     def calculate_similarity(self, correct_answer: str, student_answer: str) -> float:
         """
@@ -72,18 +69,13 @@ class SimilarityCalculator:
         print(f"Cleaned student: {student_cleaned[:100]}...")
         
         if not correct_cleaned or not student_cleaned:
-            print("⚠️ Warning: One or both answers became empty after preprocessing")
+            print("Warning: One or both answers became empty after preprocessing")
             return 0.0
         
         similarity_score = 0.0
         
         if self.method == "cosine":
-            # Try cosine first, fallback to fuzzy if it fails
             similarity_score = self._cosine_similarity(correct_cleaned, student_cleaned)
-            if similarity_score == 0.0:
-                print("⚠️ Cosine similarity failed (0.0), falling back to fuzzy similarity")
-                similarity_score = self._fuzzy_similarity(correct_cleaned, student_cleaned)
-                print(f"📊 Fuzzy fallback score: {similarity_score:.3f}")
         elif self.method == "semantic":
             similarity_score = self._semantic_similarity(correct_cleaned, student_cleaned)
         elif self.method == "fuzzy":
@@ -106,7 +98,7 @@ class SimilarityCalculator:
             
             # Check if vectors are empty
             if tfidf_matrix.shape[1] == 0:
-                print("  ⚠️ TF-IDF produced empty vectors (no vocabulary overlap)")
+                print("  Warning: TF-IDF produced empty vectors (no vocabulary overlap)")
                 return 0.0
             
             # Calculate cosine similarity
@@ -365,81 +357,91 @@ def get_similarity_method_info() -> Dict[str, str]:
         'semantic': 'Semantic similarity using sentence transformers - understands meaning'
     }
 
-class HybridGradingEngine:
+class GeminiOnlyGradingEngine:
     """
-    Hybrid grading engine that prioritizes Gemini intelligent grading with similarity fallback.
-    Provides the best of both worlds: AI understanding + robust fallback.
+    Gemini-only grading engine that uses exclusively Gemini AI for intelligent grading.
+    No fallbacks - requires Gemini API key to function.
     """
     
-    def __init__(self, similarity_method: str = "fuzzy", gemini_api_key: Optional[str] = None):
+    def __init__(self, gemini_api_key: str):
         """
-        Initialize hybrid grading engine.
+        Initialize Gemini-only grading engine.
         
         Args:
-            similarity_method: Fallback similarity method
-            gemini_api_key: API key for Gemini intelligent grading
+            gemini_api_key: API key for Gemini intelligent grading (required)
         """
-        self.similarity_engine = GradingEngine(similarity_method)
-        self.gemini_grader = None
-        self.use_gemini = False
+        if not gemini_api_key:
+            raise ValueError("Gemini API key is required for Gemini-only grading")
         
-        if gemini_api_key:
-            try:
-                from gemini_processor import GeminiGrader
-                self.gemini_grader = GeminiGrader(gemini_api_key)
-                self.use_gemini = True
-                print("🤖 Hybrid engine initialized with Gemini intelligent grading")
-            except Exception as e:
-                print(f"⚠️ Could not initialize Gemini grader: {e}")
-                print("🔄 Falling back to similarity-only grading")
-        
-        if not self.use_gemini:
-            print("📊 Initialized similarity-only grading engine")
+        try:
+            from gemini_processor import GeminiGrader
+            self.gemini_grader = GeminiGrader(gemini_api_key)
+            print("Gemini-only grading engine initialized successfully")
+        except ImportError as e:
+            raise ImportError(f"Failed to import Gemini processor: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Gemini grader: {e}")
     
     def grade_answer(self, question_num: int, correct_answer: str, student_answer: str, max_marks: int) -> Dict[str, Any]:
         """
-        Grade a single answer using the best available method.
-        
-        Priority: Gemini > Enhanced Similarity > Basic Similarity
+        Grade a single answer using Gemini AI exclusively.
         """
-        if self.use_gemini and self.gemini_grader:
-            try:
-                print(f"🤖 Attempting Gemini intelligent grading for Q{question_num}...")
-                result = self.gemini_grader.grade_answer(question_num, correct_answer, student_answer, max_marks)
-                
-                # Ensure all required fields are present
-                result['correct_answer'] = correct_answer
-                result['student_answer'] = student_answer
-                result['confidence'] = result.get('confidence', 'high')
-                
-                print(f"✅ Gemini grading successful: {result['marks_awarded']}/{max_marks}")
-                return result
-                
-            except Exception as e:
-                print(f"⚠️ Gemini grading failed for Q{question_num}: {e}")
-                print("🔄 Falling back to similarity grading...")
+        if not student_answer.strip():
+            print(f"Q{question_num}: No student answer provided")
+            return {
+                'marks_awarded': 0,
+                'max_marks': max_marks,
+                'percentage': 0.0,
+                'similarity_score': 0.0,
+                'justification': 'No answer provided by student',
+                'suggestions': 'Please provide an answer to receive marks',
+                'confidence': 'high',
+                'correct_answer': correct_answer,
+                'student_answer': student_answer,
+                'grading_method': 'gemini'
+            }
         
-        # Fallback to enhanced similarity grading
-        print(f"📊 Using similarity grading for Q{question_num}")
-        result = self.similarity_engine.grade_answer(correct_answer, student_answer, max_marks)
-        
-        # Add additional fields for consistency
-        result['correct_answer'] = correct_answer
-        result['student_answer'] = student_answer
-        result['grading_method'] = 'similarity'
-        
-        return result
+        try:
+            print(f"Using Gemini AI for intelligent grading of Q{question_num}...")
+            result = self.gemini_grader.grade_answer(question_num, correct_answer, student_answer, max_marks)
+            
+            # Ensure all required fields are present
+            result['correct_answer'] = correct_answer
+            result['student_answer'] = student_answer
+            result['confidence'] = result.get('confidence', 'high')
+            result['grading_method'] = 'gemini'
+            
+            print(f"Gemini grading successful: {result['marks_awarded']}/{max_marks}")
+            return result
+            
+        except Exception as e:
+            print(f"Gemini grading failed for Q{question_num}: {e}")
+            print("🚫 No fallback available - Gemini-only mode")
+            
+            # Return error result instead of fallback
+            return {
+                'marks_awarded': 0,
+                'max_marks': max_marks,
+                'percentage': 0.0,
+                'similarity_score': 0.0,
+                'justification': f'Gemini grading failed: {str(e)}',
+                'suggestions': 'Please check your Gemini API key and try again',
+                'confidence': 'low',
+                'correct_answer': correct_answer,
+                'student_answer': student_answer,
+                'grading_method': 'gemini_error'
+            }
     
     def grade_all_answers(self, answer_key: Dict[int, Dict[str, Any]], 
                          student_answers: Dict[int, str]) -> Dict[int, Dict[str, Any]]:
         """
-        Grade all answers using hybrid approach with progress tracking.
+        Grade all answers using Gemini AI exclusively.
         """
-        print("🚀 Starting hybrid grading process...")
+        print("🚀 Starting Gemini-only grading process...")
         results = {}
         
         gemini_success = 0
-        similarity_fallback = 0
+        gemini_errors = 0
         
         for q_num, answer_data in answer_key.items():
             correct_answer = answer_data['answer']
@@ -453,7 +455,7 @@ class HybridGradingEngine:
             if result.get('grading_method') == 'gemini':
                 gemini_success += 1
             else:
-                similarity_fallback += 1
+                gemini_errors += 1
         
         # Add comprehensive summary
         total_marks = sum(result['marks_awarded'] for result in results.values())
@@ -467,15 +469,16 @@ class HybridGradingEngine:
                                       if q != 'summary' and r['student_answer'].strip()]),
             'total_questions': len(answer_key),
             'gemini_success': gemini_success,
-            'similarity_fallback': similarity_fallback,
-            'grading_method': 'hybrid'
+            'gemini_errors': gemini_errors,
+            'grading_method': 'gemini_only'
         }
         
-        # Report grading method distribution
+        # Report grading results
         total_qs = len(answer_key)
-        print(f"🎆 Hybrid grading complete!")
-        print(f"🤖 Gemini intelligent: {gemini_success}/{total_qs} questions")
-        print(f"📊 Similarity fallback: {similarity_fallback}/{total_qs} questions")
+        print(f"Gemini-only grading complete!")
+        print(f"Gemini successful: {gemini_success}/{total_qs} questions")
+        if gemini_errors > 0:
+            print(f"Gemini errors: {gemini_errors}/{total_qs} questions")
         print(f"📊 Total score: {total_marks}/{total_max_marks} ({results['summary']['percentage']:.1f}%)")
         
         return results

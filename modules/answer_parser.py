@@ -32,13 +32,13 @@ class AnswerKeyParser:
         if self.gemini_api_key and GEMINI_AVAILABLE:
             try:
                 genai.configure(api_key=self.gemini_api_key)
-                self.gemini_model = genai.GenerativeModel('gemini-2.0-flash-exp')
-                print("✅ Gemini AI initialized successfully")
+                self.gemini_model = genai.GenerativeModel('gemini-2.0-flash-lite')
+                print("Gemini AI initialized successfully")
             except Exception as e:
-                print(f"❌ Failed to initialize Gemini: {e}")
+                print(f"Failed to initialize Gemini: {e}")
                 self.gemini_model = None
         else:
-            print("⚠️ Gemini not available - API key missing or module not installed")
+            print("Gemini not available - API key missing or module not installed")
     
     def extract_text_from_pdf(self, file_content: bytes) -> str:
         """Extract text from PDF using Gemini AI."""
@@ -81,7 +81,7 @@ IMPORTANT:
                 "data": pdf_base64
             }
             
-            print("🤖 Using Gemini AI to extract answer key...")
+            print("Using Gemini AI to extract answer key...")
             response = self.gemini_model.generate_content([prompt, file_part])
             
             if response and response.text:
@@ -128,7 +128,7 @@ IMPORTANT:
 5. Return ONLY the JSON
 """
             
-            print("🤖 Using Gemini AI to process Word document...")
+            print("Using Gemini AI to process Word document...")
             response = self.gemini_model.generate_content(prompt)
             
             if response and response.text:
@@ -172,14 +172,14 @@ IMPORTANT:
                     'marks': q_data.get('marks', 10)
                 }
             
-            print(f"✅ Successfully extracted {len(result)} questions")
+            print(f"Successfully extracted {len(result)} questions")
             for q_num, data in result.items():
                 print(f"   Q{q_num}: Question ({len(data['question'])} chars), Answer ({len(data['answer'])} chars), {data['marks']} marks")
             
             return result
             
         except json.JSONDecodeError as e:
-            print(f"❌ JSON parsing failed: {e}")
+            print(f"JSON parsing failed: {e}")
             print(f"Raw response: {response_text[:500]}...")
             raise ValueError(f"API failed: Could not parse Gemini response - {e}")
         except Exception as e:

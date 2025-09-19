@@ -1,38 +1,51 @@
 # MarkMySheets 📝
 
-An AI-powered automated grading system for handwritten answer sheets.
+An AI-powered automated grading system for handwritten answer sheets using **Gemini 2.5 Flash exclusively**.
 
 ## Features
-- OCR text extraction from handwritten answers
-- Cosine similarity-based answer comparison
-- LLM-powered grading justifications
-- Streamlit web interface
+
+## Prerequisites
+- Google AI Studio API key (free tier available)
+- Python 3.8+
 
 ## Setup
-1. Install dependencies:
+1. Get your free Gemini API key from [Google AI Studio](https://aistudio.google.com/)
+
+2. Set your API key as an environment variable:
+```bash
+# Windows
+set GEMINI_API_KEY=your_api_key_here
+
+# Linux/Mac
+export GEMINI_API_KEY=your_api_key_here
+```
+
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Run the application:
+4. Run the application:
 ```bash
 streamlit run app.py
 ```
 
 ## Usage
-1. Upload answer key (PDF/Word document)
-2. Upload student answer sheet (image)
-3. Set question weights
-4. Get automated grading with justifications
+1. Ensure your Gemini API key is configured
+2. Upload answer key (PDF/Word document) - Gemini will intelligently extract questions and answers
+3. Upload student answer sheet (image) - Gemini OCR will process handwritten text with advanced preprocessing
+4. Set question weights if needed
+5. Get comprehensive AI-powered grading with detailed justifications
 
 ## Project Structure
 ```
 MarkMySheets/
 ├── app.py                 # Main Streamlit application
 ├── modules/
-│   ├── ocr_processor.py   # OCR and text extraction
 │   ├── answer_parser.py   # Question parsing and structuring
-│   ├── similarity.py     # Answer similarity calculation
+│   ├── gemini_processor.py # Gemini AI for OCR and text extraction
+│   ├── image_preprocessor.py # Advanced image preprocessing for Image/Video Analytics
+│   ├── similarity.py     # Gemini-only grading engine
 │   └── llm_grader.py     # LLM integration for justifications
 ├── utils/
 │   └── file_handlers.py  # File upload and processing utilities
